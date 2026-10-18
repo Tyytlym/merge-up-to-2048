@@ -40,4 +40,4 @@ No build step. Just open `index.html` in a browser.
 
 ## 许可证 / License
 
-MIT
+DeepSeek
