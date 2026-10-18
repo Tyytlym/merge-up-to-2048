@@ -20,6 +20,8 @@ An endless 2048 web game with milestone achievements and synthesized sound effec
 
 无需构建，直接用浏览器打开 `index.html` 即可。  
 No build step. Just open `index.html` in a browser.
+or
+https://tyytlym.github.io/merge-up-to-2048/
 
 ## 操作 / Controls
 
