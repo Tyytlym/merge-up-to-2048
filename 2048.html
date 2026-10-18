@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2048 无限流</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #faf8ef;
+    color: #776e65;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .game { width: min(92vw, 470px); }
+
+  /* ---------- 顶部 ---------- */
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  h1 {
+    font-size: clamp(40px, 11vw, 58px);
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+
+  .scores { display: flex; gap: 8px; }
+
+  .score-box {
+    position: relative;
+    background: #bbada0;
+    border-radius: 6px;
+    padding: 7px 12px 8px;
+    min-width: 84px;
+    text-align: center;
+  }
+
+  .score-box .label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #eee4da;
+    opacity: .9;
+  }
+
+  .score-box .value {
+    font-size: clamp(16px, 4.6vw, 22px);
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .score-add {
+    position: absolute;
+    left: 0; right: 0;
+    top: 2px;
+    font-size: 20px;
+    font-weight: 800;
+    color: #776e65;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .score-add.run { animation: score-fly .7s ease-out; }
+
+  @keyframes score-fly {
+    0%   { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-34px); }
+  }
+
+  .info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .hint { font-size: 13px; line-height: 1.4; color: #8f7a66; }
+  .hint strong { color: #776e65; }
+
+  .actions { display: flex; align-items: center; gap: 8px; }
+
+  button {
+    font-family: inherit;
+    background: #8f7a66;
+    color: #f9f6f2;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s, transform .1s;
+  }
+
+  button:hover  { background: #9f8b77; }
+  button:active { transform: scale(.96); }
+
+  .icon-btn {
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    font-size: 17px;
+    line-height: 40px;
+    text-align: center;
+    background: #bbada0;
+  }
+  .icon-btn:hover { background: #c8bab0; }
+  .icon-btn.off { opacity: .55; }
+
+  /* ---------- 棋盘 ---------- */
+  .board {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #bbada0;
+    border-radius: 8px;
+    margin-top: 14px;
+    touch-action: none;
+  }
+
+  .cell {
+    position: absolute;
+    width: 22.5%;
+    height: 22.5%;
+    background: rgba(238, 228, 218, .35);
+    border-radius: 5px;
+  }
+
+  .tiles { position: absolute; inset: 0; }
+
+  .tile {
+    position: absolute;
+    width: 22.5%;
+    height: 22.5%;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    line-height: 1;
+    z-index: 2;
+    background: #eee4da;
+    color: #776e65;
+    transition: left .1s ease-in-out, top .1s ease-in-out;
+    will-change: left, top;
+    padding: 0 2px;
+    text-align: center;
+  }
+
+  /* 数字配色：一路延伸到 65536+ */
+  .v2      { background: #eee4da; color: #776e65; }
+  .v4      { background: #ede0c8; color: #776e65; }
+  .v8      { background: #f2b179; color: #f9f6f2; }
+  .v16     { background: #f59563; color: #f9f6f2; }
+  .v32     { background: #f67c5f; color: #f9f6f2; }
+  .v64     { background: #f65e3b; color: #f9f6f2; }
+  .v128    { background: #edcf72; color: #f9f6f2; }
+  .v256    { background: #edcc61; color: #f9f6f2; }
+  .v512    { background: #edc850; color: #f9f6f2; }
+  .v1024   { background: #edc53f; color: #f9f6f2; }
+  .v2048   { background: #edc22e; color: #f9f6f2; box-shadow: 0 0 22px rgba(243, 215, 116, .6); }
+  .v4096   { background: #f2653b; color: #f9f6f2; box-shadow: 0 0 20px rgba(242, 101, 59, .45); }
+  .v8192   { background: #d94f2b; color: #f9f6f2; box-shadow: 0 0 22px rgba(217, 79, 43, .5); }
+  .v16384  { background: #b13a1f; color: #f9f6f2; box-shadow: 0 0 22px rgba(177, 58, 31, .55); }
+  .v32768  { background: #7d2b18; color: #f9f6f2; box-shadow: 0 0 24px rgba(125, 43, 24, .6); }
+  .v65536  { background: #4a1b10; color: #f9f6f2; box-shadow: 0 0 26px rgba(74, 27, 16, .7); }
+  .vsuper  { background: #1d0b07; color: #ffd66b; box-shadow: 0 0 30px rgba(255, 214, 107, .55); }
+
+  @keyframes tile-appear {
+    0%   { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .tile-new { animation: tile-appear .16s ease-out; }
+
+  @keyframes tile-pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.16); }
+    100% { transform: scale(1); }
+  }
+  .tile-merged { animation: tile-pop .18s ease-in-out; }
+
+  /* ---------- 成就横幅 ---------- */
+  .achievement-stack {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: max-content;
+    max-width: 94%;
+    pointer-events: none;
+  }
+
+  .achievement {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 18px 9px 12px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3c3a32, #26241d);
+    color: #f9f6f2;
+    box-shadow: 0 10px 30px rgba(0,0,0,.32);
+    animation: ach-in .38s cubic-bezier(.18,1.25,.4,1) both;
+    transform-origin: top center;
+  }
+
+  .achievement.out { animation: ach-out .28s ease-in forwards; }
+
+  @keyframes ach-in {
+    0%   { opacity: 0; transform: translateY(-16px) scale(.86); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes ach-out {
+    0%   { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-10px) scale(.92); }
+  }
+
+  .achievement .ach-icon {
+    font-size: 22px;
+    line-height: 1;
+    flex: none;
+    filter: drop-shadow(0 0 6px rgba(255, 214, 107, .5));
+  }
+
+  .achievement .ach-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+  }
+
+  .achievement .ach-title {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: .3px;
+  }
+
+  .achievement .ach-desc {
+    font-size: 11.5px;
+    opacity: .75;
+    font-weight: 600;
+  }
+
+  /* 三级配色 */
+  .achievement.tier-1 {
+    border: 1.5px solid rgba(120, 180, 255, .75);
+    box-shadow: 0 10px 30px rgba(0,0,0,.32), 0 0 18px rgba(90, 150, 255, .22);
+  }
+  .achievement.tier-1 .ach-title { color: #9cc8ff; }
+
+  .achievement.tier-2 {
+    border: 1.5px solid rgba(210, 220, 235, .8);
+    box-shadow: 0 10px 30px rgba(0,0,0,.32), 0 0 18px rgba(200, 215, 235, .18);
+  }
+  .achievement.tier-2 .ach-title { color: #dfe8f5; }
+
+  .achievement.tier-3 {
+    border: 1.5px solid rgba(255, 214, 107, .9);
+    box-shadow: 0 10px 30px rgba(0,0,0,.36), 0 0 24px rgba(255, 200, 80, .35);
+  }
+  .achievement.tier-3 .ach-title { color: #ffd66b; }
+
+  /* ---------- 遮罩层（仅游戏结束） ---------- */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    border-radius: 8px;
+    background: rgba(250, 248, 239, .88);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 20px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease;
+  }
+
+  .overlay.show { opacity: 1; pointer-events: auto; }
+
+  .overlay h2 {
+    font-size: clamp(28px, 8vw, 42px);
+    font-weight: 800;
+  }
+
+  .overlay p { font-size: 15px; color: #8f7a66; line-height: 1.6; }
+
+  .overlay .buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+</style>
+</head>
+<body>
+
+<div class="game">
+  <div class="title-row">
+    <h1>2048</h1>
+    <div class="scores">
+      <div class="score-box">
+        <div class="label">得分</div>
+        <div class="value" id="score">0</div>
+        <div class="score-add" id="score-add"></div>
+      </div>
+      <div class="score-box">
+        <div class="label">最高分</div>
+        <div class="value" id="best">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-row">
+    <p class="hint">无限模式：一路拼到 <strong>4096 / 8192</strong> …<br>方向键 / WASD / 滑动</p>
+    <div class="actions">
+      <button id="sound-toggle" class="icon-btn" title="音效开关" aria-label="音效开关">🔊</button>
+      <button id="new-game">新游戏</button>
+    </div>
+  </div>
+
+  <div class="board" id="board">
+    <div id="grid"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="achievement-stack" id="achievement-stack"></div>
+
+    <div class="overlay" id="overlay">
+      <h2 id="overlay-title">游戏结束</h2>
+      <p id="overlay-text"></p>
+      <div class="buttons">
+        <button id="restart">再来一局</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     音效模块：纯 Web Audio 合成
+     ============================================================ */
+  const Sound = (function () {
+    let ctx = null;
+    let master = null;
+    let muted = false;
+
+    function init() {
+      if (ctx) return true;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0.32;
+      master.connect(ctx.destination);
+      return true;
+    }
+
+    function unlock() {
+      if (!init()) return;
+      if (ctx.state === 'suspended') ctx.resume();
+    }
+
+    function note(freq, o) {
+      o = o || {};
+      if (muted || !ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const t0  = ctx.currentTime + (o.delay || 0);
+      const dur = o.dur || 0.12;
+      const vol = o.vol == null ? 0.4 : o.vol;
+
+      const osc = ctx.createOscillator();
+      const g   = ctx.createGain();
+
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      if (o.slide) osc.frequency.exponentialRampToValueAtTime(o.slide, t0 + dur);
+
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + Math.min(0.02, dur * 0.3));
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+      osc.connect(g);
+      g.connect(master);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.05);
+    }
+
+    // 合并音高到 2048 后封顶
+    function mergeFreq(value) {
+      const idx = Math.log2(value);
+      const step = Math.min(idx - 1, 11) * 2 / 12;
+      return 261.63 * Math.pow(2, step);
+    }
+
+    return {
+      unlock,
+      isMuted: () => muted,
+      setMuted(m) { muted = !!m; },
+
+      tap() { note(660, { type: 'sine', dur: 0.07, vol: 0.25 }); },
+
+      move() { note(200, { type: 'sine', slide: 130, dur: 0.07, vol: 0.14 }); },
+
+      merge(v, delay) {
+        note(mergeFreq(v), { type: 'triangle', dur: 0.11, vol: 0.38, delay: delay || 0 });
+      },
+
+      newGame() {
+        note(392,    { type: 'triangle', dur: 0.10, vol: 0.30 });
+        note(523.25, { type: 'triangle', dur: 0.14, vol: 0.30, delay: 0.09 });
+      },
+
+      /* 成就音效：三级各不同 */
+      achievement(tier) {
+        if (tier === 3) {
+          // 数字里程碑：五音上行琶音 + 低频垫底，华丽
+          [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((f, i) => {
+            note(f, { type: 'triangle', dur: 0.26, vol: 0.30, delay: i * 0.08 });
+          });
+          note(130.81, { type: 'sine', dur: 0.6, vol: 0.16, delay: 0.05 });
+        } else if (tier === 2) {
+          // 分数里程碑：两音上行，明亮
+          note(587.33, { type: 'triangle', dur: 0.16, vol: 0.30 });
+          note(880,    { type: 'triangle', dur: 0.22, vol: 0.30, delay: 0.10 });
+        } else {
+          // 操作成就：短促“叮叮”
+          note(659.25, { type: 'square', dur: 0.07, vol: 0.12 });
+          note(987.77, { type: 'square', dur: 0.10, vol: 0.12, delay: 0.07 });
+        }
+      },
+
+      gameOver() {
+        [392, 329.63, 261.63].forEach((f, i) => {
+          note(f, { type: 'sine', dur: 0.32, vol: 0.30, delay: i * 0.16 });
+        });
+      }
+    };
+  })();
+
+  /* ============================================================
+     成就定义
+     tier 3 = 数字里程碑（金）
+     tier 2 = 分数里程碑（银）
+     tier 1 = 操作 / 状态成就（蓝）
+     ============================================================ */
+  const ACHIEVEMENTS = [
+    // ---- 数字里程碑 ----
+    { id: 't2048',  tier: 3, icon: '🎯', title: '初露锋芒',   desc: '首次合成 2048',            check: c => c.maxTile >= 2048 },
+    { id: 't4096',  tier: 3, icon: '🚀', title: '更上一层楼', desc: '合成 4096',                check: c => c.maxTile >= 4096 },
+    { id: 't8192',  tier: 3, icon: '🔥', title: '势不可挡',   desc: '合成 8192',                check: c => c.maxTile >= 8192 },
+    { id: 't16384', tier: 3, icon: '⛰️', title: '登峰造极',   desc: '合成 16384',               check: c => c.maxTile >= 16384 },
+    { id: 't32768', tier: 3, icon: '👑', title: '一代宗师',   desc: '合成 32768',               check: c => c.maxTile >= 32768 },
+    { id: 't65536', tier: 3, icon: '🌟', title: '超神之境',   desc: '合成 65536',               check: c => c.maxTile >= 65536 },
+
+    // ---- 分数里程碑 ----
+    { id: 's1000',   tier: 2, icon: '💰', title: '小有所成',   desc: '得分达到 1000',          check: c => c.score >= 1000 },
+    { id: 's5000',   tier: 2, icon: '💎', title: '渐入佳境',   desc: '得分达到 5000',          check: c => c.score >= 5000 },
+    { id: 's10000',  tier: 2, icon: '🏆', title: '万元户',     desc: '得分达到 10000',         check: c => c.score >= 10000 },
+    { id: 's25000',  tier: 2, icon: '🎖️', title: '两万五千里', desc: '得分达到 25000',         check: c => c.score >= 25000 },
+    { id: 's50000',  tier: 2, icon: '👑', title: '五万富豪',   desc: '得分达到 50000',         check: c => c.score >= 50000 },
+    { id: 's100000', tier: 2, icon: '🌠', title: '十万传奇',   desc: '得分达到 100000',        check: c => c.score >= 100000 },
+
+    // ---- 操作 / 状态 ----
+    { id: 'combo3',  tier: 1, icon: '⚡', title: '连锁反应', desc: '单次移动合并 3 次以上',      check: c => c.turnMerges >= 3 },
+    { id: 'gain400', tier: 1, icon: '🎁', title: '大丰收',   desc: '单次移动得分 400+',          check: c => c.turnGain >= 400 },
+    { id: 'gain1500',tier: 1, icon: '💥', title: '超级丰收', desc: '单次移动得分 1500+',         check: c => c.turnGain >= 1500 },
+    { id: 'full',    tier: 1, icon: '🎲', title: '满盘皆子', desc: '棋盘首次被填满',             check: c => c.emptyCount === 0 },
+    { id: 'tight',   tier: 1, icon: '😰', title: '险象环生', desc: '只剩 1 空格且最大数 ≥ 512',  check: c => c.emptyCount === 1 && c.maxTile >= 512 }
+  ];
+
+  /* ============================================================
+     游戏本体
+     ============================================================ */
+  const SIZE = 4;
+  const GAP = 2;
+  const TILE = 22.5;
+  const STEP = 24.5;
+
+  const boardEl      = document.getElementById('board');
+  const gridEl       = document.getElementById('grid');
+  const tilesEl      = document.getElementById('tiles');
+  const scoreEl      = document.getElementById('score');
+  const scoreAddEl   = document.getElementById('score-add');
+  const bestEl       = document.getElementById('best');
+  const overlayEl    = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlay-title');
+  const overlayText  = document.getElementById('overlay-text');
+  const restartBtn   = document.getElementById('restart');
+  const newGameBtn   = document.getElementById('new-game');
+  const soundBtn     = document.getElementById('sound-toggle');
+  const achStack     = document.getElementById('achievement-stack');
+
+  let grid;
+  let tiles;
+  let score = 0;
+  let best = 0;
+  let nextId = 1;
+  let gameOver = false;
+  let unlocked = new Set();   // 本局已解锁的成就 id
+
+  /* ---------------- 成就队列 ---------------- */
+  const achQueue = [];
+  let achShowing = false;
+  let achToken = 0;
+
+  function queueAchievement(ach) {
+    achQueue.push(ach);
+    if (!achShowing) showNextAchievement();
+  }
+
+  function showNextAchievement() {
+    if (!achQueue.length) { achShowing = false; return; }
+    achShowing = true;
+
+    const token = achToken;
+    const ach = achQueue.shift();
+
+    Sound.achievement(ach.tier);
+
+    const card = document.createElement('div');
+    card.className = 'achievement tier-' + ach.tier;
+    card.innerHTML =
+      '<div class="ach-icon">' + ach.icon + '</div>' +
+      '<div class="ach-body">' +
+        '<div class="ach-title">' + ach.title + '</div>' +
+        '<div class="ach-desc">' + ach.desc + '</div>' +
+      '</div>';
+    achStack.appendChild(card);
+
+    setTimeout(function () {
+      if (token !== achToken) return;
+      card.classList.add('out');
+      setTimeout(function () {
+        if (token !== achToken) return;
+        card.remove();
+        showNextAchievement();
+      }, 280);
+    }, 1600);
+  }
+
+  function clearAchievements() {
+    achToken++;
+    achQueue.length = 0;
+    achShowing = false;
+    achStack.innerHTML = '';
+  }
+
+  /* ---------------- 成就检查 ---------------- */
+
+  function checkAchievements(ctx) {
+    for (const a of ACHIEVEMENTS) {
+      if (!unlocked.has(a.id) && a.check(ctx)) {
+        unlocked.add(a.id);
+        queueAchievement(a);
+      }
+    }
+  }
+
+  function buildContext(turnGain, turnMerges) {
+    let maxTile = 0;
+    let emptyCount = 0;
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const t = grid[r][c];
+        if (!t) emptyCount++;
+        else if (t.value > maxTile) maxTile = t.value;
+      }
+    }
+    return {
+      maxTile: maxTile,
+      score: score,
+      emptyCount: emptyCount,
+      turnGain: turnGain,
+      turnMerges: turnMerges
+    };
+  }
+
+  /* ---------------- 工具 ---------------- */
+
+  const pos = i => (GAP + i * STEP) + '%';
+
+  const CLASS_MAP = {
+    2: 'v2', 4: 'v4', 8: 'v8', 16: 'v16', 32: 'v32', 64: 'v64',
+    128: 'v128', 256: 'v256', 512: 'v512', 1024: 'v1024', 2048: 'v2048',
+    4096: 'v4096', 8192: 'v8192', 16384: 'v16384', 32768: 'v32768', 65536: 'v65536'
+  };
+
+  function tileClass(v) {
+    return 'tile ' + (CLASS_MAP[v] || 'vsuper');
+  }
+
+  function fitFont(el, value) {
+    const tileSize = boardEl.clientWidth * TILE / 100;
+    const len = String(value).length;
+    let factor;
+    if (len <= 2)       factor = 0.46;
+    else if (len === 3) factor = 0.38;
+    else if (len === 4) factor = 0.30;
+    else if (len === 5) factor = 0.245;
+    else if (len === 6) factor = 0.205;
+    else                factor = 0.17;
+    el.style.fontSize = (tileSize * factor) + 'px';
+  }
+
+  /* ---------------- 初始化 ---------------- */
+
+  function buildCells() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.left = pos(c);
+        cell.style.top = pos(r);
+        gridEl.appendChild(cell);
+      }
+    }
+  }
+
+  function newGame() {
+    grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+    tiles = [];
+    score = 0;
+    nextId = 1;
+    gameOver = false;
+    unlocked = new Set();
+
+    clearAchievements();
+    tilesEl.innerHTML = '';
+    overlayEl.classList.remove('show');
+
+    addRandomTile();
+    addRandomTile();
+
+    updateScore();
+    render();
+
+    Sound.newGame();
+  }
+
+  function addRandomTile() {
+    const empty = [];
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (!grid[r][c]) empty.push([r, c]);
+      }
+    }
+    if (!empty.length) return;
+
+    const [r, c] = empty[Math.floor(Math.random() * empty.length)];
+    const value = Math.random() < 0.9 ? 2 : 4;
+    const tile = {
+      id: nextId++,
+      value: value,
+      row: r,
+      col: c,
+      el: null,
+      dead: false,
+      merged: false
+    };
+    grid[r][c] = tile;
+    tiles.push(tile);
+  }
+
+  /* ---------------- 渲染 ---------------- */
+
+  function render() {
+    const removing = [];
+
+    for (const t of tiles) {
+      if (t.dead) {
+        if (t.el) {
+          t.el.style.left = pos(t.col);
+          t.el.style.top  = pos(t.row);
+          removing.push(t.el);
+        }
+      }
+    }
+    tiles = tiles.filter(t => !t.dead);
+
+    for (const t of tiles) {
+      let el = t.el;
+
+      if (!el) {
+        el = document.createElement('div');
+        el.className = tileClass(t.value) + ' tile-new';
+        el.textContent = t.value;
+        el.style.left = pos(t.col);
+        el.style.top  = pos(t.row);
+        t.el = el;
+        tilesEl.appendChild(el);
+        fitFont(el, t.value);
+      } else {
+        el.style.left = pos(t.col);
+        el.style.top  = pos(t.row);
+
+        if (t.merged) {
+          t.merged = false;
+          const target = el;
+          const val = t.value;
+          setTimeout(() => {
+            target.className = tileClass(val) + ' tile-merged';
+            target.textContent = val;
+            fitFont(target, val);
+            setTimeout(() => target.classList.remove('tile-merged'), 200);
+          }, 100);
+        }
+      }
+    }
+
+    for (const el of removing) {
+      setTimeout(() => el.remove(), 100);
+    }
+  }
+
+  function updateScore() {
+    scoreEl.textContent = score;
+    if (score > best) {
+      best = score;
+      try { localStorage.setItem('best2048', String(best)); } catch (e) {}
+      bestEl.textContent = best;
+    }
+  }
+
+  function showScoreAdd(gained) {
+    scoreAddEl.textContent = '+' + gained;
+    scoreAddEl.classList.remove('run');
+    void scoreAddEl.offsetWidth;
+    scoreAddEl.classList.add('run');
+  }
+
+  /* ---------------- 核心：移动 ---------------- */
+
+  function move(dir) {
+    if (gameOver) return;
+
+    const vectors = {
+      left:  [0, -1],
+      right: [0,  1],
+      up:    [-1, 0],
+      down:  [1,  0]
+    };
+    const [dr, dc] = vectors[dir];
+
+    const rowOrder = dr > 0 ? [3, 2, 1, 0] : [0, 1, 2, 3];
+    const colOrder = dc > 0 ? [3, 2, 1, 0] : [0, 1, 2, 3];
+
+    let moved = false;
+    let gained = 0;
+    const mergedThisTurn = new Set();
+    const mergeValues = [];
+
+    for (const r of rowOrder) {
+      for (const c of colOrder) {
+        const tile = grid[r][c];
+        if (!tile) continue;
+
+        let nr = r, nc = c;
+
+        while (true) {
+          const tr = nr + dr;
+          const tc = nc + dc;
+
+          if (tr < 0 || tr >= SIZE || tc < 0 || tc >= SIZE) break;
+
+          const other = grid[tr][tc];
+
+          if (!other) {
+            grid[tr][tc] = tile;
+            grid[nr][nc] = null;
+            nr = tr;
+            nc = tc;
+            moved = true;
+          } else if (other.value === tile.value && !mergedThisTurn.has(other.id)) {
+            grid[nr][nc] = null;
+            mergedThisTurn.add(other.id);
+
+            other.value *= 2;
+            other.merged = true;
+            gained += other.value;
+            mergeValues.push(other.value);
+
+            tile.dead = true;
+            tile.row = tr;
+            tile.col = tc;
+
+            moved = true;
+            break;
+          } else {
+            break;
+          }
+        }
+
+        if (!tile.dead) {
+          tile.row = nr;
+          tile.col = nc;
+        }
+      }
+    }
+
+    if (!moved) return;
+
+    /* 音效：滑动 + 合并依次错开 */
+    Sound.move();
+    mergeValues.forEach((v, i) => Sound.merge(v, 0.03 + i * 0.06));
+
+    if (gained > 0) {
+      score += gained;
+      updateScore();
+      showScoreAdd(gained);
+    }
+
+    addRandomTile();
+    render();
+
+    /* 成就检查：每次有效移动后 */
+    checkAchievements(buildContext(gained, mergeValues.length));
+
+    /* 只有真的无路可走时才结束 */
+    if (!canMove()) {
+      gameOver = true;
+      Sound.gameOver();
+      overlayTitle.textContent = '游戏结束';
+      overlayText.innerHTML =
+        '最终得分 <strong>' + score + '</strong><br>' +
+        '本局解锁成就 <strong>' + unlocked.size + '</strong> / ' + ACHIEVEMENTS.length + ' 个';
+      overlayEl.classList.add('show');
+    }
+  }
+
+  function canMove() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const t = grid[r][c];
+        if (!t) return true;
+        if (c + 1 < SIZE && grid[r][c + 1] && grid[r][c + 1].value === t.value) return true;
+        if (r + 1 < SIZE && grid[r + 1][c] && grid[r + 1][c].value === t.value) return true;
+      }
+    }
+    return false;
+  }
+
+  /* ---------------- 输入 ---------------- */
+
+  const KEY_MAP = {
+    ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+    a: 'left', d: 'right', w: 'up', s: 'down',
+    A: 'left', D: 'right', W: 'up', S: 'down',
+    h: 'left', l: 'right', k: 'up', j: 'down'
+  };
+
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const dir = KEY_MAP[e.key];
+    if (dir) {
+      e.preventDefault();
+      move(dir);
+    }
+  });
+
+  let touchStart = null;
+
+  boardEl.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    touchStart = { x: t.clientX, y: t.clientY };
+  }, { passive: true });
+
+  boardEl.addEventListener('touchmove', function (e) {
+    if (touchStart) e.preventDefault();
+  }, { passive: false });
+
+  boardEl.addEventListener('touchend', function (e) {
+    if (!touchStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    touchStart = null;
+
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      move(dx > 0 ? 'right' : 'left');
+    } else {
+      move(dy > 0 ? 'down' : 'up');
+    }
+  }, { passive: true });
+
+  /* ---------------- 音频解锁 ---------------- */
+
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+    document.addEventListener(ev, function () { Sound.unlock(); }, { once: true, passive: true });
+  });
+
+  /* ---------------- 音效开关 ---------------- */
+
+  function updateSoundBtn() {
+    const muted = Sound.isMuted();
+    soundBtn.textContent = muted ? '🔇' : '🔊';
+    soundBtn.classList.toggle('off', muted);
+  }
+
+  soundBtn.addEventListener('click', function () {
+    Sound.unlock();
+    Sound.setMuted(!Sound.isMuted());
+    try { localStorage.setItem('muted2048', Sound.isMuted() ? '1' : '0'); } catch (e) {}
+    updateSoundBtn();
+    Sound.tap();
+  });
+
+  /* ---------------- 按钮 ---------------- */
+
+  newGameBtn.addEventListener('click', newGame);
+  restartBtn.addEventListener('click', newGame);
+
+  /* ---------------- 响应式 ---------------- */
+
+  window.addEventListener('resize', function () {
+    for (const t of tiles) {
+      if (t.el) fitFont(t.el, t.value);
+    }
+  });
+
+  /* ---------------- 启动 ---------------- */
+
+  try {
+    best = Number(localStorage.getItem('best2048')) || 0;
+    Sound.setMuted(localStorage.getItem('muted2048') === '1');
+  } catch (e) {
+    best = 0;
+  }
+  bestEl.textContent = best;
+  updateSoundBtn();
+
+  buildCells();
+  newGame();
+
+})();
+</script>
+</body>
+</html>
